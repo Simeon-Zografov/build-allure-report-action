@@ -1,0 +1,315 @@
+name: 'Publish Allure Report'
+description: 'Merge, generate, and publish Allure reports to gh_pages'
+
+inputs:
+  branch:
+    description: 'Branch to publish reports to'
+    required: false
+    default: 'gh_pages'
+  env_name:
+    description: 'Environment name (QA, UAT, etc.)'
+    required: true
+  report_id:
+    description: 'Build/Run ID'
+    required: true
+  repo:
+    description: 'Repository name (e.g. user/repo)'
+    required: true
+  run_id:
+    description: 'GitHub run ID'
+    required: true
+  run_number:
+    description: 'GitHub run number'
+    required: true
+  keep_reports:
+    description: 'How many past reports to keep'
+    required: false
+    default: '5'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout gh_pages branch
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.repo }}
+        ref: ${{ inputs.branch }}
+        path: gh_pages
+
+    - name: Install Allure CLI
+      run: npm install -g allure-commandline
+      shell: bash
+
+    - name: Clean unnecessary files
+      run: |
+        rm -rf gh_pages/{.git,.github,.gitignore,.idea,Common,Pages,Tests,pytest.ini,requirements.txt}
+      shell: bash
+
+    - name: Merge individual reports
+      run: |
+        mkdir -p gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/allure-results
+        for browser_dir in gh_pages/results-*; do
+          cp -r "$browser_dir"/* gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/allure-results/
+        done
+        rm -rf gh_pages/results-*
+      shell: bash
+
+    - name: Clean old reports
+      run: |
+        ENV_DIR="gh_pages/${{ inputs.env_name }}"
+        
+        if [ ! -d "$ENV_DIR" ]; then
+          echo "Environment directory does not exist. Skipping cleanup."
+          exit 0
+        fi
+        
+        echo "Listing numeric subdirectories:"
+        find "$ENV_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort
+
+        mapfile -t REPORT_FOLDERS < <(find "$ENV_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
+
+        NUM_REPORTS=${#REPORT_FOLDERS[@]}
+        echo "Found $NUM_REPORTS report folders: ${REPORT_FOLDERS[*]}"
+
+        if (( NUM_REPORTS > ${{ inputs.keep_reports }} )); then
+          NUM_TO_DELETE=$((NUM_REPORTS - ${{ inputs.keep_reports }}))
+          echo "Need to delete $NUM_TO_DELETE oldest report(s)..."
+
+          for (( i=0; i<$NUM_TO_DELETE; i++ )); do
+            OLD_ID="${REPORT_FOLDERS[$i]}"
+            OLD_DIR="$ENV_DIR/$OLD_ID"
+            echo "Deleting report folder: $OLD_DIR"
+            rm -rf "$OLD_DIR"
+
+            echo "Removing entry from landing page: $OLD_ID"
+            sed -i "/>${OLD_ID}</d" gh_pages/index.html
+          done
+        else
+          echo "Nothing to delete. Only $NUM_REPORTS reports found."
+        fi
+        
+        HISTORY_TREND_FILE="$ENV_DIR/last-history/history-trend.json"
+        CATEGORIES_TREND_FILE="$ENV_DIR/last-history/categories-trend.json"
+        DURATION_TREND_FILE="$ENV_DIR/last-history/duration-trend.json"
+        RETRY_TREND_FILE="$ENV_DIR/last-history/retry-trend.json"
+        HISTORY_JSON="$ENV_DIR/last-history/history-trend.json"
+        for FILE in "$HISTORY_TREND_FILE" "$CATEGORIES_TREND_FILE" "$DURATION_TREND_FILE" "$RETRY_TREND_FILE"; do
+          if [ -f "$FILE" ]; then
+            echo "Trimming $FILE to 5 entries..."
+            jq 'sort_by(.buildOrder | tonumber) | .[-(${{ inputs.keep_reports }} - 1):]' "$FILE" > tmp_trimmed.json
+            jq 'sort_by(.buildOrder | tonumber) | reverse' tmp_trimmed.json > "$FILE"
+            rm tmp_trimmed.json
+          else
+            echo "File not found: $FILE. Skipping."
+          fi
+        done
+
+#        mapfile -t REPORTS < <(find "$ENV_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
+#
+#        if (( ${#REPORTS[@]} > ${{ inputs.keep_reports }} )); then
+#          DEL_COUNT=$((${#REPORTS[@]} - ${{ inputs.keep_reports }}))
+#          for ((i=0; i<DEL_COUNT; i++)); do
+#            echo "Deleting old report: ${REPORTS[$i]}"
+#            rm -rf "$ENV_DIR/${REPORTS[$i]}"
+#          done
+#        fi
+      shell: bash
+
+    - name: Generate metadata files
+      run: |
+        REPORT_PATH="gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}"
+        echo "Environment=${{ inputs.env_name }}" > $REPORT_PATH/allure-results/environment.properties
+
+        cat <<EOF > $REPORT_PATH/allure-results/executor.json
+        {
+          "name": "GitHub Actions",
+          "type": "github",
+          "url": "https://github.com/${{ inputs.repo }}/actions/runs/${{ inputs.run_id }}",
+          "buildOrder": ${{ inputs.run_number }},
+          "buildName": "Run Selenium Tests",
+          "buildUrl": "https://github.com/${{ inputs.repo }}/actions/runs/${{ inputs.run_id }}",
+          "reportUrl": "https://${{ inputs.repo }}.github.io/QADemo/${{ inputs.env_name }}/${{ inputs.report_id }}/index.html"
+        }
+        EOF
+      shell: bash
+
+    - name: Restore history if available
+      run: |
+        HISTORY_PATH="gh_pages/${{ inputs.env_name }}/last-history"
+        DEST="gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/allure-results/history"
+        if [ -d "$HISTORY_PATH" ]; then
+          mkdir -p "$DEST"
+          cp -r "$HISTORY_PATH"/* "$DEST"
+        fi
+      shell: bash
+
+    - name: Generate Allure report
+      run: |
+        REPORT_DIR="gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}"
+        mkdir -p gh_pages/_tmp-report
+        allure generate "$REPORT_DIR/allure-results" --clean -o gh_pages/_tmp-report
+        rm -rf "$REPORT_DIR"/*
+        mv gh_pages/_tmp-report/* "$REPORT_DIR/"
+        rm -rf gh_pages/_tmp-report
+      shell: bash
+
+    - name: Patch json files with report metadata
+      run: |
+        REPORT_DIR="gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}"
+        HISTORY_TREND_FILE="gh_pages/${{ $REPORT_DIR }}/history/history-trend.json"
+        CATEGORIES_TREND_FILE="gh_pages/${{ $REPORT_DIR }}/history/categories-trend.json"
+        DURATION_TREND_FILE="gh_pages/${{ $REPORT_DIR }}/history/duration-trend.json"
+        RETRY_TREND_FILE="gh_pages/${{ $REPORT_DIR }}/history/retry-trend.json"
+        REPORT_ID=${{ inputs.report_id }}
+        ENV_NAME=${{ inputs.env_name }}
+        REPO_NAME="${{ inputs.repo }}"
+        REPORT_NAME="${ENV_NAME} #${REPORT_ID}"
+        REPORT_URL="/${REPO_NAME}/${ENV_NAME}/${REPORT_ID}/index.html"
+
+        for FILE in "$HISTORY_TREND_FILE" "$CATEGORIES_TREND_FILE" "$DURATION_TREND_FILE" "$RETRY_TREND_FILE"; do
+          if [ -f "$FILE" ]; then
+            jq --arg name "$REPORT_NAME" \
+               --arg url "$REPORT_URL" \
+               --argjson order "$REPORT_ID" \
+               '.[0] += {reportName: $name, reportUrl: $url, buildOrder: $order}' "$FILE" > tmp.json && mv tmp.json "$FILE"
+          else
+            echo "File not found: $FILE. Skipping."
+          fi
+        done
+      shell: bash
+
+    - name: Save history for next run
+      run: |
+        if [ ! -d gh_pages/${{ inputs.env_name }}/last-history ]; then
+          mkdir -p gh_pages/${{ inputs.env_name }}/last-history
+        fi
+        cp -r gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/history/* gh_pages/${{ inputs.env_name }}/last-history
+      shell: bash
+
+    - name: Save timestamp
+      run: |
+        date +"%Y-%m-%d %H:%M:%S" > gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/timestamp.txt
+      shell: bash
+
+    - name: Create environment index.html
+      run: |
+        REPORT_ID="${{ inputs.report_id }}"
+        cat > gh_pages/${{ inputs.env_name }}/index.html <<EOF
+        <!DOCTYPE html>
+        <meta charset="utf-8">
+        <meta http-equiv="refresh" content="0; URL=https://Simeon-Zografov.github.io/QADemo/${{ inputs.env_name }}/${REPORT_ID}/index.html">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
+        EOF
+      shell: bash
+
+    - name: Generate landing page with all environments
+      run: |
+        LANDING_PAGE="gh_pages/index.html"
+
+        echo "<!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <title>Execution Reports</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              background: #171D35;
+              margin: 0;
+              padding: 2rem;
+              color: #333;
+            }
+            .container {
+              max-width: 600px;
+              margin: auto;
+              background: white;
+              padding: 2rem;
+              border-radius: 8px;
+              box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            }
+            h1 {
+              text-align: center;
+              margin-bottom: 1.5rem;
+            }
+            .env {
+              margin: 1rem 0;
+            }
+            .env h2 {
+              margin-bottom: 0.5rem;
+            }
+            a {
+              display: inline-block;
+              margin: 0.25rem 0;
+              text-decoration: none;
+              color: #0366d6;
+            }
+            a:hover {
+              text-decoration: underline;
+            }
+            table { 
+              border-collapse: collapse; width: 100%; margin-bottom: 2rem; 
+            }
+            th, td { 
+              padding: 0.5rem; border-bottom: 1px solid #ccc; text-align: left; 
+            }
+            th {
+              background-color: #eaeaea; 
+            }
+            .logo { max-width: 200px; margin-bottom: 1rem; }
+          </style>
+        </head>
+        <body>
+          <img src="https://hedgehoglab.com/wp-content/uploads/2023/05/Logos.svg" class='logo'>
+          <div class="container">
+          <h1>Test Report Dashboard</h1>" > "$LANDING_PAGE"
+
+        for ENV_DIR in gh_pages/*/; do
+          ENV_NAME=$(basename "$ENV_DIR")
+          [[ "$ENV_NAME" =~ ^(QA|UAT|DEV|PROD)$ ]] || continue
+
+          echo "<h2>Environment: <a href='${ENV_NAME}/index.html'>$ENV_NAME</a></h2>
+          <table>
+            <thead><tr><th>Execution</th><th>Date</th><th>Link</th></tr></thead>
+            <tbody>" >> "$LANDING_PAGE"
+
+          REPORT_DIRS=$(ls -d gh_pages/$ENV_NAME/[0-9]* 2>/dev/null | sort -nr)
+          IS_FIRST=true
+          for REPORT_DIR in $REPORT_DIRS; do
+            ID=$(basename "$REPORT_DIR")
+            TS_FILE="$REPORT_DIR/timestamp.txt"
+            if [ -f "$TS_FILE" ]; then
+              TS=$(cat "$TS_FILE")
+            else
+              TS=$(date -r "$REPORT_DIR" +"%Y-%m-%d %H:%M")
+            fi
+
+            if [ "$IS_FIRST" = true ]; then
+              LABEL=" <span style='background-color:#007bff;color:#fff;padding:2px 6px;border-radius:4px;font-size:0.8rem;'>Latest</span>"
+              IS_FIRST=false
+            else
+              LABEL=""
+            fi
+
+            echo "<tr><td>#${ID} $LABEL</td><td>${TS}</td><td><a href='${ENV_NAME}/${ID}/index.html'>View Report</a></td></tr>" >> "$LANDING_PAGE"
+          done
+
+          echo "</tbody></table>" >> "$LANDING_PAGE"
+        done
+
+        echo "</body></html>" >> "$LANDING_PAGE"
+      shell: bash
+
+#    - name: Commit and push to gh_pages
+#      run: |
+#        cd gh_pages
+#        git init
+#        git config user.name "github-actions"
+#        git config user.email "github-actions@github.com"
+#        git remote add origin "https://github.com/${{ inputs.repo }}"
+#        git checkout -b ${{ inputs.branch }}
+#        git add .
+#        git commit -m "Publish report for ${{ inputs.env_name }} #${{ inputs.report_id }}"
+#        git push --force origin ${{ inputs.branch }}
+#      shell: bash
