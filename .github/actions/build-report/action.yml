@@ -95,7 +95,7 @@ runs:
         HISTORY_JSON="$ENV_DIR/last-history/history-trend.json"
         for FILE in "$HISTORY_TREND_FILE" "$CATEGORIES_TREND_FILE" "$DURATION_TREND_FILE" "$RETRY_TREND_FILE"; do
           if [ -f "$FILE" ]; then
-            echo "Trimming $FILE to 5 entries..."
+            echo "Trimming $FILE to ${{ inputs.keep_reports }} entries..."
             jq 'sort_by(.buildOrder | tonumber) | .[-(${{ inputs.keep_reports }} - 1):]' "$FILE" > tmp_trimmed.json
             jq 'sort_by(.buildOrder | tonumber) | reverse' tmp_trimmed.json > "$FILE"
             rm tmp_trimmed.json
