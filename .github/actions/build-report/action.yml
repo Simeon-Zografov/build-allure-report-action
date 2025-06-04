@@ -157,7 +157,7 @@ runs:
       run: |
         REPORT_ID="${{ inputs.report_id }}"
         ENV_NAME="${{ inputs.env_name }}"
-        REPO_NAME="${{ inputs.repo }}"
+        REPO_NAME="$(basename "${{ inputs.repo }}")"
 
         REPORT_DIR="gh_pages/${ENV_NAME}/${REPORT_ID}"
         HISTORY_TREND_FILE="${REPORT_DIR}/history/history-trend.json"
