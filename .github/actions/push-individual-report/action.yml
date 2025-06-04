@@ -1,0 +1,56 @@
+name: 'Push Allure Results'
+description: 'Push allure results to gh_pages branch'
+
+inputs:
+  branch:
+    description: 'Branch to push the results to'
+    required: false
+    default: 'gh_pages'
+  browser:
+    description: 'On which browser the test was executed'
+    required: true
+  github-token:
+    description: 'GitHub token'
+    required: true
+  number-of-browsers:
+    description: 'What is the maximum number of browsers for parallel execution'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Commit and push individual report to gh_pages
+      shell: bash
+      run: |
+        BROWSER_DIR="results-${{ inputs.browser }}"
+        BRANCH="${{ inputs.branch }}"
+
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
+        git remote set-url origin https://x-access-token:${{ inputs.github-token }}@github.com/${{ github.repository }}
+
+        git fetch origin $BRANCH
+        git checkout -b $BRANCH || git checkout $BRANCH
+        git pull origin $BRANCH --rebase
+
+        mkdir -p ${BROWSER_DIR}
+        cp -r allure-results/* ${BROWSER_DIR}/
+
+        git add ${BROWSER_DIR}
+        git commit -m "Add report for ${{ inputs.browser }}" || echo "Nothing to commit"
+
+        MAX_PUSH_ATTEMPTS=$(( ${{ inputs.number-of-browsers }} + 1 ))
+        n=0
+        until [ $n -ge $MAX_PUSH_ATTEMPTS ]; do
+          git pull origin $BRANCH --rebase
+          git push origin $BRANCH && break
+          n=$((n+1))
+          echo "Push failed, retrying in 3 seconds..."
+          sleep 3
+        done
+
+        if [ $n -ge $MAX_PUSH_ATTEMPTS ]; then
+          echo "Failed to push after $MAX_PUSH_ATTEMPTS attempts."
+          exit 1
+        fi
