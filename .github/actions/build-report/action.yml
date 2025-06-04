@@ -275,24 +275,24 @@ runs:
             <thead><tr><th>Execution</th><th>Date</th><th>Link</th></tr></thead>
             <tbody>" >> "$LANDING_PAGE"
 
-          REPORT_DIRS=$(ls -d gh_pages/$ENV_NAME/[0-9]* 2>/dev/null | sort -nr)
+          REPORT_DIRS=$(find gh_pages/$ENV_NAME -maxdepth 1 -type d -regex ".*/[0-9]+" -printf "%f\n" | sort -nr)
           IS_FIRST=true
-          for REPORT_DIR in $REPORT_DIRS; do
-            ID=$(basename "$REPORT_DIR")
+          for ID in $REPORT_DIRS; do
+            REPORT_DIR="gh_pages/${ENV_NAME}/${ID}"
             TS_FILE="$REPORT_DIR/timestamp.txt"
             if [ -f "$TS_FILE" ]; then
               TS=$(cat "$TS_FILE")
             else
               TS=$(date -r "$REPORT_DIR" +"%Y-%m-%d %H:%M")
             fi
-
+          
             if [ "$IS_FIRST" = true ]; then
               LABEL=" <span style='background-color:#007bff;color:#fff;padding:2px 6px;border-radius:4px;font-size:0.8rem;'>Latest</span>"
               IS_FIRST=false
             else
               LABEL=""
             fi
-
+          
             echo "<tr><td>#${ID} $LABEL</td><td>${TS}</td><td><a href='${ENV_NAME}/${ID}/index.html'>View Report</a></td></tr>" >> "$LANDING_PAGE"
           done
 
