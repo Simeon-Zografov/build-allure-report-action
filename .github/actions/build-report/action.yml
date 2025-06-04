@@ -103,16 +103,6 @@ runs:
             echo "File not found: $FILE. Skipping."
           fi
         done
-
-#        mapfile -t REPORTS < <(find "$ENV_DIR" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | grep -E '^[0-9]+$' | sort -n)
-#
-#        if (( ${#REPORTS[@]} > ${{ inputs.keep_reports }} )); then
-#          DEL_COUNT=$((${#REPORTS[@]} - ${{ inputs.keep_reports }}))
-#          for ((i=0; i<DEL_COUNT; i++)); do
-#            echo "Deleting old report: ${REPORTS[$i]}"
-#            rm -rf "$ENV_DIR/${REPORTS[$i]}"
-#          done
-#        fi
       shell: bash
 
     - name: Generate metadata files
@@ -301,16 +291,3 @@ runs:
 
         echo "</body></html>" >> "$LANDING_PAGE"
       shell: bash
-
-#    - name: Commit and push to gh_pages
-#      run: |
-#        cd gh_pages
-#        git init
-#        git config user.name "github-actions"
-#        git config user.email "github-actions@github.com"
-#        git remote add origin "https://github.com/${{ inputs.repo }}"
-#        git checkout -b ${{ inputs.branch }}
-#        git add .
-#        git commit -m "Publish report for ${{ inputs.env_name }} #${{ inputs.report_id }}"
-#        git push --force origin ${{ inputs.branch }}
-#      shell: bash
