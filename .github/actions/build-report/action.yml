@@ -155,14 +155,15 @@ runs:
 
     - name: Patch json files with report metadata
       run: |
-        REPORT_DIR="gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}"
-        HISTORY_TREND_FILE="gh_pages/${{ $REPORT_DIR }}/history/history-trend.json"
-        CATEGORIES_TREND_FILE="gh_pages/${{ $REPORT_DIR }}/history/categories-trend.json"
-        DURATION_TREND_FILE="gh_pages/${{ $REPORT_DIR }}/history/duration-trend.json"
-        RETRY_TREND_FILE="gh_pages/${{ $REPORT_DIR }}/history/retry-trend.json"
-        REPORT_ID=${{ inputs.report_id }}
-        ENV_NAME=${{ inputs.env_name }}
+        REPORT_ID="${{ inputs.report_id }}"
+        ENV_NAME="${{ inputs.env_name }}"
         REPO_NAME="${{ inputs.repo }}"
+
+        REPORT_DIR="gh_pages/${ENV_NAME}/${REPORT_ID}"
+        HISTORY_TREND_FILE="${REPORT_DIR}/history/history-trend.json"
+        CATEGORIES_TREND_FILE="${REPORT_DIR}/history/categories-trend.json"
+        DURATION_TREND_FILE="${REPORT_DIR}/history/duration-trend.json"
+        RETRY_TREND_FILE="${REPORT_DIR}/history/retry-trend.json"
         REPORT_NAME="${ENV_NAME} #${REPORT_ID}"
         REPORT_URL="/${REPO_NAME}/${ENV_NAME}/${REPORT_ID}/index.html"
 
