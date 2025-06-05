@@ -87,7 +87,7 @@ runs:
         CATEGORIES_TREND_FILE="$ENV_DIR/last-history/categories-trend.json"
         DURATION_TREND_FILE="$ENV_DIR/last-history/duration-trend.json"
         RETRY_TREND_FILE="$ENV_DIR/last-history/retry-trend.json"
-        HISTORY_FILE="gh_pages/${ENV_NAME}/history/history.json"
+        HISTORY_FILE=""$ENV_DIR/last-history/history.json"
         for FILE in "$HISTORY_TREND_FILE" "$CATEGORIES_TREND_FILE" "$DURATION_TREND_FILE" "$RETRY_TREND_FILE"; do
           if [ -f "$FILE" ]; then
             echo "Trimming $FILE to ${{ inputs.keep_reports }} entries..."
