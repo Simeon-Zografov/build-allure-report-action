@@ -26,10 +26,14 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Set environment variable
+      run: echo "GITHUB_REPOSITORY=${GITHUB_REPOSITORY}" >> $GITHUB_ENV
+      shell: bash
+
     - name: Checkout gh_pages branch
       uses: actions/checkout@v4
       with:
-        repository: ${GITHUB_REPOSITORY}
+        repository: ${{ env.GITHUB_REPOSITORY }}
         ref: ${{ inputs.branch }}
         path: gh_pages
 
