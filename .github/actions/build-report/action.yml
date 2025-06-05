@@ -12,9 +12,6 @@ inputs:
   report_id:
     description: 'Build/Run ID'
     required: true
-  repo:
-    description: 'Repository name (e.g. user/repo)'
-    required: true
   run_id:
     description: 'GitHub run ID'
     required: true
@@ -32,7 +29,7 @@ runs:
     - name: Checkout gh_pages branch
       uses: actions/checkout@v4
       with:
-        repository: ${{ inputs.repo }}
+        repository: ${GITHUB_REPOSITORY}
         ref: ${{ inputs.branch }}
         path: gh_pages
 
@@ -108,17 +105,20 @@ runs:
     - name: Generate metadata files
       run: |
         REPORT_PATH="gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}"
+        FULL_REPO="${GITHUB_REPOSITORY}"
+        OWNER="${FULL_REPO%%/*}"
+        REPO="${FULL_REPO##*/}"
         echo "Environment=${{ inputs.env_name }}" > $REPORT_PATH/allure-results/environment.properties
 
         cat <<EOF > $REPORT_PATH/allure-results/executor.json
         {
           "name": "GitHub Actions",
           "type": "github",
-          "url": "https://github.com/${{ inputs.repo }}/actions/runs/${{ inputs.run_id }}",
+          "url": "https://github.com/${FULL_REPO}/actions/runs/${{ inputs.run_id }}",
           "buildOrder": ${{ inputs.run_number }},
           "buildName": "Run Selenium Tests",
-          "buildUrl": "https://github.com/${{ inputs.repo }}/actions/runs/${{ inputs.run_id }}",
-          "reportUrl": "https://${{ inputs.repo }}.github.io/QADemo/${{ inputs.env_name }}/${{ inputs.report_id }}/index.html"
+          "buildUrl": "https://github.com/${FULL_REPO}/actions/runs/${{ inputs.run_id }}",
+          "reportUrl": "https://${OWNER}.github.io/${REPO}/${{ inputs.env_name }}/${{ inputs.report_id }}/index.html"
         }
         EOF
       shell: bash
@@ -147,7 +147,8 @@ runs:
       run: |
         REPORT_ID="${{ inputs.report_id }}"
         ENV_NAME="${{ inputs.env_name }}"
-        REPO_NAME="$(basename "${{ inputs.repo }}")"
+        FULL_REPO="${GITHUB_REPOSITORY}"
+        REPO_NAME="${FULL_REPO##*/}"
 
         REPORT_DIR="gh_pages/${ENV_NAME}/${REPORT_ID}"
         HISTORY_TREND_FILE="${REPORT_DIR}/history/history-trend.json"
