@@ -15,7 +15,7 @@ inputs:
   keep_reports:
     description: 'How many past reports to keep'
     required: false
-    default: '5'
+    default: '10'
 
 runs:
   using: "composite"
@@ -99,7 +99,7 @@ runs:
           fi
         done
         if [ -f "$HISTORY_FILE" ]; then
-          jq --argjson keep ${{ inputs.keep_reports }} '
+          jq --argjson keep (${{ inputs.keep_reports }} - 1) '
             with_entries(
               .value.items |= .[:$keep]
             )
