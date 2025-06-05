@@ -99,6 +99,7 @@ runs:
           fi
         done
         HISTORY_NUMBER=(${{ inputs.keep_reports }} - 1)
+        echo "Trimming $HISTORY_FILE to $HISTORY_NUMBER entries..."
         if [ -f "$HISTORY_FILE" ]; then
           jq --argjson keep ${HISTORY_NUMBER} '
             with_entries(
