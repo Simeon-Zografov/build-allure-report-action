@@ -12,9 +12,6 @@ inputs:
   report_id:
     description: 'Build/Run ID'
     required: true
-  run_number:
-    description: 'GitHub run number'
-    required: true
   keep_reports:
     description: 'How many past reports to keep'
     required: false
@@ -116,7 +113,7 @@ runs:
           "name": "GitHub Actions",
           "type": "github",
           "url": "https://github.com/${FULL_REPO}/actions/runs/${{ github.run_id }}",
-          "buildOrder": ${{ inputs.run_number }},
+          "buildOrder": ${{ inputs.report_id }},
           "buildName": "Run Selenium Tests",
           "buildUrl": "https://github.com/${FULL_REPO}/actions/runs/${{ github.run_id }}",
           "reportUrl": "https://${OWNER}.github.io/${REPO}/${{ inputs.env_name }}/${{ inputs.report_id }}/index.html"
