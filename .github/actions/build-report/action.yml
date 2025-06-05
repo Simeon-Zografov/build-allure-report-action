@@ -100,9 +100,9 @@ runs:
         done
         if [ -f "$HISTORY_FILE" ]; then
           jq --argjson keep ${{ inputs.keep_reports }} '
-            to_entries
-            | .[:$keep]
-            | from_entries
+            with_entries(
+              .value.items |= .[:$keep]
+            )
           ' "$HISTORY_FILE" > tmp.json && mv tmp.json "$HISTORY_FILE"
         else
           echo "History file not found: $HISTORY_FILE"
