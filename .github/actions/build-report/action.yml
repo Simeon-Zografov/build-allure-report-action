@@ -98,8 +98,9 @@ runs:
             echo "File not found: $FILE. Skipping."
           fi
         done
+        HISTORY_NUMBER=(${{ inputs.keep_reports }} - 1)
         if [ -f "$HISTORY_FILE" ]; then
-          jq --argjson keep (${{ inputs.keep_reports }} - 1) '
+          jq --argjson keep ${HISTORY_NUMBER} '
             with_entries(
               .value.items |= .[:$keep]
             )
