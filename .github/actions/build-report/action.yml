@@ -286,11 +286,6 @@ runs:
               else
                 PASS_PERCENT="N/A"
               fi
-              if [ "$PASS_PERCENT" -eq 100 ]; then
-                STATUS_ICON="✅"
-              else
-                STATUS_ICON="❌"
-              fi
             else
               PASS_PERCENT="N/A"
             fi
@@ -302,7 +297,7 @@ runs:
               LABEL=""
             fi
           
-            echo "<tr><td>#${ID} $LABEL</td><td>${TS}</td><td>${PASS_PERCENT}% ${STATUS_ICON}</td><td><a href='${ENV_NAME}/${ID}/index.html'>View Report</a></td></tr>" >> "$LANDING_PAGE"
+            echo "<tr><td>#${ID} $LABEL</td><td>${TS}</td><td>${PASS_PERCENT}%</td><td><a href='${ENV_NAME}/${ID}/index.html'>View Report</a></td></tr>" >> "$LANDING_PAGE"
           done
 
           echo "</tbody></table>" >> "$LANDING_PAGE"
