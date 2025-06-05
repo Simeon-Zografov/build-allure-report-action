@@ -258,11 +258,11 @@ runs:
 
         for ENV_DIR in gh_pages/*/; do
           ENV_NAME=$(basename "$ENV_DIR")
-          [[ "$ENV_NAME" =~ ^(QA|UAT|DEV|PROD)$ ]] || continue
+          [[ "$ENV_NAME" =~ ^(QA|UAT|DEV|PROD|STAGING)$ ]] || continue
 
           echo "<h2>Environment: <a href='${ENV_NAME}/index.html'>$ENV_NAME</a></h2>
           <table>
-            <thead><tr><th>Execution</th><th>Date</th><th>Link</th></tr></thead>
+            <thead><tr><th>Execution</th><th>Date</th><th>Pass %</th><th>Link</th></tr></thead>
             <tbody>" >> "$LANDING_PAGE"
 
           REPORT_DIRS=$(find gh_pages/$ENV_NAME -maxdepth 1 -type d -regex ".*/[0-9]+" -printf "%f\n" | sort -nr)
@@ -270,10 +270,29 @@ runs:
           for ID in $REPORT_DIRS; do
             REPORT_DIR="gh_pages/${ENV_NAME}/${ID}"
             TS_FILE="$REPORT_DIR/timestamp.txt"
+            HISTORY_TREND_FILE="$REPORT_DIR/history/history-trend.json"
+        
             if [ -f "$TS_FILE" ]; then
               TS=$(cat "$TS_FILE")
             else
               TS=$(date -r "$REPORT_DIR" +"%Y-%m-%d %H:%M")
+            fi
+        
+            if [ -f "$HISTORY_TREND_FILE" ]; then
+              PASSED=$(jq '.[0].data.passed' "$HISTORY_TREND_FILE")
+              TOTAL=$(jq '.[0].data.total' "$HISTORY_TREND_FILE")
+              if [ "$TOTAL" -gt 0 ]; then
+                PASS_PERCENT=$(( 100 * PASSED / TOTAL ))
+              else
+                PASS_PERCENT="N/A"
+              fi
+              if [ "$PASS_PERCENT" -eq 100 ]; then
+                STATUS_ICON="✅"
+              else
+                STATUS_ICON="❌"
+              fi
+            else
+              PASS_PERCENT="N/A"
             fi
           
             if [ "$IS_FIRST" = true ]; then
@@ -283,7 +302,7 @@ runs:
               LABEL=""
             fi
           
-            echo "<tr><td>#${ID} $LABEL</td><td>${TS}</td><td><a href='${ENV_NAME}/${ID}/index.html'>View Report</a></td></tr>" >> "$LANDING_PAGE"
+            echo "<tr><td>#${ID} $LABEL</td><td>${TS}</td><td>${PASS_PERCENT}% ${STATUS_ICON}</td><td><a href='${ENV_NAME}/${ID}/index.html'>View Report</a></td></tr>" >> "$LANDING_PAGE"
           done
 
           echo "</tbody></table>" >> "$LANDING_PAGE"
