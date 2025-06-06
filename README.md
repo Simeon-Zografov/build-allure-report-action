@@ -54,18 +54,18 @@ Merges results from all browsers, generates a full Allure report, tracks histori
 
 ---
 
-📂 Output Structure (on gh_pages)
-gh_pages/
-├── index.html                     # Central dashboard
-├── QA/
-│   ├── index.html                 # Redirects to latest QA report
-│   ├── 1234/                      # Report #1234
-│   └── last-history/             # Keeps latest history files
-└── UAT/
-    └── ...
+#### 📂 Output Structure (on gh_pages)
+gh_pages/  
+├── index.html   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;              # Central dashboard  
+├── QA/  
+│   ├── index.html     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;                # Redirects to latest QA report  
+│   ├── 1234/        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;              # Report #1234  
+│   └── last-history/      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       # Keeps latest history files  
+└── UAT/  
+    └── ...  
 
-🧪 Requirements
-Your test jobs must output Allure results to allure-results/.
+#### 🧪 Requirements  
+Your test jobs must output Allure results to allure-results/.  
 Requires allure-commandline via npm.
 
 ## 🚀 Usage Example
