@@ -8,13 +8,15 @@ inputs:
     default: 'gh_pages'
   browser:
     description: 'On which browser the test was executed'
-    required: true
+    required: false
+    default: "all"
   github-token:
     description: 'GitHub token'
     required: true
   number-of-browsers:
     description: 'What is the maximum number of browsers for parallel execution'
-    required: true
+    required: false
+    default: '5'
 
 runs:
   using: "composite"
