@@ -196,10 +196,13 @@ runs:
     - name: Create environment index.html
       run: |
         REPORT_ID="${{ inputs.report_id }}"
+        FULL_REPO="${GITHUB_REPOSITORY}"
+        OWNER="${FULL_REPO%%/*}"
+        REPO="${FULL_REPO##*/}"
         cat > gh_pages/${{ inputs.env_name }}/index.html <<EOF
         <!DOCTYPE html>
         <meta charset="utf-8">
-        <meta http-equiv="refresh" content="0; URL=https://Simeon-Zografov.github.io/QADemo/${{ inputs.env_name }}/${REPORT_ID}/index.html">
+        <meta http-equiv="refresh" content="0; URL=https://${OWNER}.github.io/${REPO}/${{ inputs.env_name }}/${REPORT_ID}/index.html">
         <meta http-equiv="Pragma" content="no-cache">
         <meta http-equiv="Expires" content="0">
         EOF
