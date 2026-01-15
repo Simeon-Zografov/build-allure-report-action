@@ -58,9 +58,9 @@ Merges results from all browsers, generates a full Allure report, tracks histori
 gh_pages/  
 ├── index.html   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;              # Central dashboard  
 ├── QA/  
-│   ├── index.html     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;                # Redirects to latest QA report  
-│   ├── 1234/        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;              # Report #1234  
-│   └── last-history/      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       # Keeps latest history files  
+│ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  ├── index.html     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;                # Redirects to latest QA report  
+│ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  ├── 1234/        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;              # Report #1234  
+│ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  └── last-history/      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       # Keeps latest history files  
 └── UAT/  
     └── ...  
 

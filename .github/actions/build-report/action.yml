@@ -37,7 +37,7 @@ runs:
 
     - name: Clean unnecessary files
       run: |
-        rm -rf gh_pages/{.git,.github,.gitignore,.idea,Common,Pages,Tests,pytest.ini,requirements.txt,tests,.DS_Store,package-lock.json,package.json,playwright.config.ts}
+        rm -rf gh_pages/{.git,.github,.gitignore,.idea,Common,common,Pages,pages,Tests,pytest.ini,requirements.txt,tests,.DS_Store,package-lock.json,package.json,playwright.config.ts,global-setup.ts,global-teardown.ts}
       shell: bash
 
     - name: Merge individual reports
