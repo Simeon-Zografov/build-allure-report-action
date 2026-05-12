@@ -26,31 +26,55 @@ runs:
       run: |
         BROWSER_DIR="results-${{ inputs.browser }}"
         BRANCH="${{ inputs.branch }}"
-
-        git config --local user.name "github-actions[bot]"
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-
-        git remote set-url origin https://x-access-token:${{ inputs.github-token }}@github.com/${{ github.repository }}
-
-        git fetch origin $BRANCH
-        git checkout -b $BRANCH || git checkout $BRANCH
-        git pull origin $BRANCH --rebase
-
-        mkdir -p ${BROWSER_DIR}
-        cp -r allure-results/* ${BROWSER_DIR}/
-
-        git add ${BROWSER_DIR}
-        git commit -m "Add report for ${{ inputs.browser }}" || echo "Nothing to commit"
-
+        REPO_URL="https://x-access-token:${{ inputs.github-token }}@github.com/${{ github.repository }}"
         MAX_PUSH_ATTEMPTS=$(( ${{ inputs.number-of-browsers }} + 1 ))
+
+        # ── Sparse-clone: only fetch the one directory we care about ──────────
+        SPARSE_DIR=$(mktemp -d)
+        git clone \
+          --no-checkout \
+          --depth=1 \
+          --filter=blob:none \
+          --branch "$BRANCH" \
+          "$REPO_URL" \
+          "$SPARSE_DIR" 2>/dev/null \
+        || {
+          # Branch doesn't exist yet — initialise it as an orphan
+          git clone --no-checkout --filter=blob:none "$REPO_URL" "$SPARSE_DIR"
+          git -C "$SPARSE_DIR" checkout --orphan "$BRANCH"
+          git -C "$SPARSE_DIR" reset --hard
+        }
+
+        git -C "$SPARSE_DIR" sparse-checkout init --cone
+        git -C "$SPARSE_DIR" sparse-checkout set "$BROWSER_DIR"
+        git -C "$SPARSE_DIR" checkout "$BRANCH" 2>/dev/null || true
+
+        git -C "$SPARSE_DIR" config user.name  "github-actions[bot]"
+        git -C "$SPARSE_DIR" config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # ── Copy only the new results into the sparse worktree ────────────────
+        mkdir -p "$SPARSE_DIR/$BROWSER_DIR"
+        cp -r allure-results/* "$SPARSE_DIR/$BROWSER_DIR/"
+
+        git -C "$SPARSE_DIR" add "$BROWSER_DIR"
+        git -C "$SPARSE_DIR" commit -m "Add results for ${{ inputs.browser }} [${GITHUB_RUN_ID}]" \
+          || { echo "Nothing to commit"; exit 0; }
+
+        # ── Retry loop: rebase on remote changes before each push attempt ─────
         n=0
         until [ $n -ge $MAX_PUSH_ATTEMPTS ]; do
-          git pull origin $BRANCH --rebase
-          git push origin $BRANCH && break
-          n=$((n+1))
-          echo "Push failed, retrying in 3 seconds..."
+          # Pull only the sparse cone so we never hydrate the full tree
+          git -C "$SPARSE_DIR" fetch --depth=1 origin "$BRANCH"
+          git -C "$SPARSE_DIR" rebase "origin/$BRANCH" \
+            && git -C "$SPARSE_DIR" push origin "$BRANCH" \
+            && break
+          n=$(( n + 1 ))
+          echo "Push attempt $n failed — retrying in 3 s..."
           sleep 3
         done
+
+        # ── Cleanup ───────────────────────────────────────────────────────────
+        rm -rf "$SPARSE_DIR"
 
         if [ $n -ge $MAX_PUSH_ATTEMPTS ]; then
           echo "Failed to push after $MAX_PUSH_ATTEMPTS attempts."
