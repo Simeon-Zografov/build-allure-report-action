@@ -2,7 +2,7 @@
 
 This repository provides a pair of GitHub composite actions to:
 
-1. 🧪 **Push individual Allure test results** (per browser) to the `gh_pages` branch.
+1. 🧪 **Upload individual Allure test results** (per browser or shard) as workflow artifacts.
 2. 📈 **Merge and publish a full Allure report**, maintain historical trends, and generate a visual dashboard per environment.
 
 ---
@@ -11,21 +11,27 @@ This repository provides a pair of GitHub composite actions to:
 
 ### 1. `Push Allure Results`
 
-Pushes individual `allure-results/` from a test job into a per-browser folder on the `gh_pages` branch.
+Uploads a job's `allure-results/` as a workflow artifact named `allure-results-${browser}`, for `Publish Allure Report` to merge.
 
 #### 🔧 Inputs
 
-| Input                | Description                                      | Required | Default     |
-|----------------------|--------------------------------------------------|----------|-------------|
-| `branch`             | Target branch to push the results                | ❌       | `gh_pages`  |
-| `browser`            | Browser name (used as folder name)               | ❌       | `all`       |
-| `github-token`       | GitHub token with push permissions               | ✅       | –           |
-| `number-of-browsers` | Number of parallel browser executions expected   | ❌       | `5`         |
+| Input            | Description                                              | Required | Default          |
+|------------------|----------------------------------------------------------|----------|------------------|
+| `browser`        | Name of this job's results (browser, shard, ...)          | ❌       | `all`            |
+| `results-path`   | Directory containing the Allure results                  | ❌       | `allure-results` |
+| `retention-days` | How long to keep the uploaded results                    | ❌       | `3`              |
+
+`branch`, `github-token` and `number-of-browsers` are still accepted but no longer used.
 
 #### ✅ What It Does
 
-- Copies `allure-results/` into `results-${browser}` on `gh_pages`.
-- Commits and pushes with retry logic (to avoid rebase conflicts in parallel jobs).
+- Uploads `allure-results/` as the `allure-results-${browser}` artifact of the current run.
+- Skips the upload (without failing) when the job produced no results.
+
+> Results used to be committed to `gh_pages` from every job. Parallel jobs then raced each other's
+> pushes (`fatal: shallow file has changed since we read it`), and a cancelled run left its
+> results on the branch to be merged into the next report. Artifacts belong to one run, so
+> neither can happen.
 
 ---
 
@@ -41,10 +47,13 @@ Merges results from all browsers, generates a full Allure report, tracks histori
 | `env_name`      | Environment name (QA, UAT, etc.)        | ✅        | –           |
 | `report_id`     | Unique ID for the report (e.g., run ID) | ✅        | –           |
 | `keep_reports`  | Number of past reports to retain        | ❌        | `10`        |
+| `results_pattern` | Name pattern of the results artifacts | ❌        | `allure-results-*` |
+| `build_name`    | Build name shown in the report          | ❌        | `Automated tests` |
+| `allure_version` | Allure CLI version to generate with    | ❌        | `2.36.0`    |
 
 #### ✅ What It Does
 
-- Merges per-browser results into a single Allure report.
+- Downloads every `allure-results-*` artifact of the run and merges them into a single Allure report.
 - Cleans old reports (older than `keep_reports`).
 - Maintains Allure history for trend graphs (`history.json`, etc.).
 - Injects metadata (`executor.json`, `environment.properties`).
@@ -65,8 +74,9 @@ gh_pages/
     └── ...  
 
 #### 🧪 Requirements  
-Your test jobs must output Allure results to allure-results/.  
-Requires allure-commandline via npm.
+Your test jobs must output Allure results to allure-results/ and upload them with `Push Allure Results` in the same workflow run.  
+The Allure CLI (allure-commandline) is installed via npm at the pinned `allure_version`.  
+When publishing with `peaceiris/actions-gh-pages`, set `force_orphan: true` so the branch keeps a single commit instead of growing by a full report snapshot on every run.
 
 ## 🚀 Usage Example
 
@@ -89,9 +99,9 @@ jobs:
           # Your test logic here...
           echo "Dummy test run"
       - name: Push Chrome results
+        if: always()
         uses: Simeon-Zografov/build-allure-report-action/.github/actions/push-individual-report@main
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           browser: chrome
 
   test-firefox:
@@ -103,20 +113,23 @@ jobs:
           # Your test logic here...
           echo "Dummy test run"
       - name: Push Firefox results
+        if: always()
         uses: Simeon-Zografov/build-allure-report-action/.github/actions/push-individual-report@main
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           browser: firefox
 
   publish-report:
     needs: [test-chrome, test-firefox]
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: Simeon-Zografov/build-allure-report-action/.github/actions/build-report@main
         with:
           env_name: QA
           report_id: ${{ github.run_number }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-
-
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh_pages
+          publish_dir: gh_pages
+          force_orphan: true

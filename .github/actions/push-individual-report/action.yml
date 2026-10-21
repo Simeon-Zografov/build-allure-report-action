@@ -1,82 +1,58 @@
 name: 'Push Allure Results'
-description: 'Push allure results to gh_pages branch'
+description: 'Upload a job''s allure-results as a workflow artifact, for the build-report action to merge'
+
+# The results used to be committed to the gh_pages branch from every job. With many parallel jobs
+# those pushes raced each other (rebase/push retries, "shallow file has changed since we read it"),
+# and a cancelled run left its results on the branch to be merged into the next report. Workflow
+# artifacts belong to a single run, so none of that can happen.
 
 inputs:
-  branch:
-    description: 'Branch to push the results to'
-    required: false
-    default: 'gh_pages'
   browser:
-    description: 'On which browser the test was executed'
+    description: 'Name of this job''s results (e.g. the browser or shard) - used in the artifact name'
     required: false
     default: "all"
+  results-path:
+    description: 'Directory containing the allure results'
+    required: false
+    default: 'allure-results'
+  retention-days:
+    description: 'How long to keep the uploaded results'
+    required: false
+    default: '3'
+  # Kept only so existing callers don't get "Unexpected input" warnings - no longer used.
+  branch:
+    description: 'Deprecated - results are uploaded as artifacts, not pushed to a branch'
+    required: false
+    default: 'gh_pages'
   github-token:
-    description: 'GitHub token'
-    required: true
+    description: 'Deprecated - not needed for artifact uploads'
+    required: false
+    default: ''
   number-of-browsers:
-    description: 'What is the maximum number of browsers for parallel execution'
+    description: 'Deprecated - there are no push retries any more'
     required: false
     default: '5'
 
 runs:
   using: "composite"
   steps:
-    - name: Commit and push individual report to gh_pages
+    - name: Check for results
+      id: check
       shell: bash
       run: |
-        BROWSER_DIR="results-${{ inputs.browser }}"
-        BRANCH="${{ inputs.branch }}"
-        REPO_URL="https://x-access-token:${{ inputs.github-token }}@github.com/${{ github.repository }}"
-        MAX_PUSH_ATTEMPTS=$(( ${{ inputs.number-of-browsers }} + 1 ))
-
-        # ── Sparse-clone: only fetch the one directory we care about ──────────
-        SPARSE_DIR=$(mktemp -d)
-        git clone \
-          --no-checkout \
-          --depth=1 \
-          --filter=blob:none \
-          --branch "$BRANCH" \
-          "$REPO_URL" \
-          "$SPARSE_DIR" 2>/dev/null \
-        || {
-          # Branch doesn't exist yet — initialise it as an orphan
-          git clone --no-checkout --filter=blob:none "$REPO_URL" "$SPARSE_DIR"
-          git -C "$SPARSE_DIR" checkout --orphan "$BRANCH"
-          git -C "$SPARSE_DIR" reset --hard
-        }
-
-        git -C "$SPARSE_DIR" sparse-checkout init --cone
-        git -C "$SPARSE_DIR" sparse-checkout set "$BROWSER_DIR"
-        git -C "$SPARSE_DIR" checkout "$BRANCH" 2>/dev/null || true
-
-        git -C "$SPARSE_DIR" config user.name  "github-actions[bot]"
-        git -C "$SPARSE_DIR" config user.email "github-actions[bot]@users.noreply.github.com"
-
-        # ── Copy only the new results into the sparse worktree ────────────────
-        mkdir -p "$SPARSE_DIR/$BROWSER_DIR"
-        cp -r allure-results/* "$SPARSE_DIR/$BROWSER_DIR/"
-
-        git -C "$SPARSE_DIR" add "$BROWSER_DIR"
-        git -C "$SPARSE_DIR" commit -m "Add results for ${{ inputs.browser }} [${GITHUB_RUN_ID}]" \
-          || { echo "Nothing to commit"; exit 0; }
-
-        # ── Retry loop: rebase on remote changes before each push attempt ─────
-        n=0
-        until [ $n -ge $MAX_PUSH_ATTEMPTS ]; do
-          # Pull only the sparse cone so we never hydrate the full tree
-          git -C "$SPARSE_DIR" fetch --depth=1 origin "$BRANCH"
-          git -C "$SPARSE_DIR" rebase "origin/$BRANCH" \
-            && git -C "$SPARSE_DIR" push origin "$BRANCH" \
-            && break
-          n=$(( n + 1 ))
-          echo "Push attempt $n failed — retrying in 3 s..."
-          sleep 3
-        done
-
-        # ── Cleanup ───────────────────────────────────────────────────────────
-        rm -rf "$SPARSE_DIR"
-
-        if [ $n -ge $MAX_PUSH_ATTEMPTS ]; then
-          echo "Failed to push after $MAX_PUSH_ATTEMPTS attempts."
-          exit 1
+        # A job can legitimately produce no results (e.g. a grep that matches nothing in this shard)
+        if [ -d "${{ inputs.results-path }}" ] && [ -n "$(ls -A "${{ inputs.results-path }}")" ]; then
+          echo "has_results=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "No results in ${{ inputs.results-path }} - nothing to upload."
+          echo "has_results=false" >> "$GITHUB_OUTPUT"
         fi
+
+    - name: Upload results
+      if: steps.check.outputs.has_results == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: allure-results-${{ inputs.browser }}
+        path: ${{ inputs.results-path }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: ignore

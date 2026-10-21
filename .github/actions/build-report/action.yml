@@ -16,6 +16,18 @@ inputs:
     description: 'How many past reports to keep'
     required: false
     default: '10'
+  results_pattern:
+    description: 'Name pattern of the allure-results artifacts uploaded by push-individual-report'
+    required: false
+    default: 'allure-results-*'
+  build_name:
+    description: 'Build name shown in the report''s executor section'
+    required: false
+    default: 'Automated tests'
+  allure_version:
+    description: 'Allure CLI (allure-commandline) version to generate the report with'
+    required: false
+    default: '2.36.0'
 
 runs:
   using: "composite"
@@ -32,7 +44,8 @@ runs:
         path: gh_pages
 
     - name: Install Allure CLI
-      run: npm install -g allure-commandline
+      # Pinned, so a new Allure release can't change or break the report between runs
+      run: npm install -g allure-commandline@${{ inputs.allure_version }}
       shell: bash
 
     - name: Clean unnecessary files
@@ -40,13 +53,25 @@ runs:
         rm -rf gh_pages/{.git,.github,.gitignore,.idea,Common,common,Pages,pages,Tests,pytest.ini,requirements.txt,tests,.DS_Store,package-lock.json,package.json,playwright.config.ts,global-setup.ts,global-teardown.ts,README.md}
       shell: bash
 
-    - name: Merge individual reports
+    - name: Remove results left on the branch by the old push action
+      # Results used to be committed to the branch as results-*; they belong to past runs
+      # (e.g. a cancelled one) and must not be merged into this report.
+      run: rm -rf gh_pages/results-*
+      shell: bash
+
+    - name: Merge individual results
+      # Every job's results artifact from this run, merged into one allure-results directory
+      uses: actions/download-artifact@v4
+      with:
+        pattern: ${{ inputs.results_pattern }}
+        merge-multiple: true
+        path: gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/allure-results
+
+    - name: Check merged results
       run: |
-        mkdir -p gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/allure-results
-        for browser_dir in gh_pages/results-*; do
-          cp -r "$browser_dir"/* gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/allure-results/
-        done
-        rm -rf gh_pages/results-*
+        RESULTS_DIR="gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/allure-results"
+        mkdir -p "$RESULTS_DIR"
+        echo "Merged $(find "$RESULTS_DIR" -name '*-result.json' | wc -l) test results"
       shell: bash
 
     - name: Clean old reports
@@ -75,9 +100,6 @@ runs:
             OLD_DIR="$ENV_DIR/$OLD_ID"
             echo "Deleting report folder: $OLD_DIR"
             rm -rf "$OLD_DIR"
-
-            echo "Removing entry from landing page: $OLD_ID"
-            sed -i "/>${OLD_ID}</d" gh_pages/index.html
           done
         else
           echo "Nothing to delete. Only $NUM_REPORTS reports found."
@@ -126,7 +148,7 @@ runs:
           "type": "github",
           "url": "https://github.com/${FULL_REPO}/actions/runs/${{ github.run_id }}",
           "buildOrder": ${{ inputs.report_id }},
-          "buildName": "Run Selenium Tests",
+          "buildName": "${{ inputs.build_name }}",
           "buildUrl": "https://github.com/${FULL_REPO}/actions/runs/${{ github.run_id }}",
           "reportUrl": "https://${OWNER}.github.io/${REPO}/${{ inputs.env_name }}/${{ inputs.report_id }}/index.html"
         }
