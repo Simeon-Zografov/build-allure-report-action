@@ -28,6 +28,15 @@ inputs:
     description: 'Allure CLI (allure-commandline) version to generate the report with'
     required: false
     default: '2.36.0'
+  ai_analysis:
+    description: 'Add an "AI analysis" column to the dashboard: "Running..." for a run with failed or broken tests until Publish AI Analysis replaces it with a link, "Not needed" when every test passed'
+    required: false
+    default: 'false'
+
+outputs:
+  ai_analysis_needed:
+    description: '"true" when ai_analysis is on and the run had failed or broken tests, so an analysis is expected to follow; "false" otherwise'
+    value: ${{ steps.ai-analysis-status.outputs.needed || 'false' }}
 
 runs:
   using: "composite"
@@ -215,6 +224,24 @@ runs:
         date +"%Y-%m-%d %H:%M:%S" > gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}/timestamp.txt
       shell: bash
 
+    - name: Record the AI analysis status
+      id: ai-analysis-status
+      if: inputs.ai_analysis == 'true'
+      run: |
+        REPORT_DIR="gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}"
+        mkdir -p "$REPORT_DIR/ai-analysis"
+        echo "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${{ github.run_id }}" > "$REPORT_DIR/ai-analysis/run-url.txt"
+        PROBLEMS=$(jq '.statistic.failed + .statistic.broken' "$REPORT_DIR/widgets/summary.json")
+        if [ "$PROBLEMS" -gt 0 ]; then
+          echo "running" > "$REPORT_DIR/ai-analysis/status.txt"
+          echo "needed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "not-needed" > "$REPORT_DIR/ai-analysis/status.txt"
+          echo "needed=false" >> "$GITHUB_OUTPUT"
+        fi
+        echo "$PROBLEMS failed or broken tests - AI analysis $(cat "$REPORT_DIR/ai-analysis/status.txt")"
+      shell: bash
+
     - name: Create environment index.html
       run: |
         REPORT_ID="${{ inputs.report_id }}"
@@ -231,113 +258,7 @@ runs:
       shell: bash
 
     - name: Generate landing page with all environments
-      run: |
-        LANDING_PAGE="gh_pages/index.html"
-
-        echo "<!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <title>Execution Reports</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              background: #171D35;
-              margin: 0;
-              padding: 2rem;
-              color: #333;
-            }
-            .container {
-              max-width: 600px;
-              margin: auto;
-              background: white;
-              padding: 2rem;
-              border-radius: 8px;
-              box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            }
-            h1 {
-              text-align: center;
-              margin-bottom: 1.5rem;
-            }
-            .env {
-              margin: 1rem 0;
-            }
-            .env h2 {
-              margin-bottom: 0.5rem;
-            }
-            a {
-              display: inline-block;
-              margin: 0.25rem 0;
-              text-decoration: none;
-              color: #0366d6;
-            }
-            a:hover {
-              text-decoration: underline;
-            }
-            table { 
-              border-collapse: collapse; width: 100%; margin-bottom: 2rem; 
-            }
-            th, td { 
-              padding: 0.5rem; border-bottom: 1px solid #ccc; text-align: left; 
-            }
-            th {
-              background-color: #eaeaea; 
-            }
-            .logo { max-width: 200px; margin-bottom: 1rem; }
-          </style>
-        </head>
-        <body>
-          <img src="https://hedgehoglab.com/wp-content/uploads/2023/05/Logos.svg" class='logo'>
-          <div class="container">
-          <h1>Test Report Dashboard</h1>" > "$LANDING_PAGE"
-
-        for ENV_DIR in gh_pages/*/; do
-          ENV_NAME=$(basename "$ENV_DIR")
-          [[ "$ENV_NAME" =~ ^(QA|UAT|DEV|PROD|STAGING)$ ]] || continue
-
-          echo "<h2>Environment: <a href='${ENV_NAME}/index.html'>$ENV_NAME</a></h2>
-          <table>
-            <thead><tr><th>Execution</th><th>Date</th><th>Pass %</th><th>Link</th></tr></thead>
-            <tbody>" >> "$LANDING_PAGE"
-
-          REPORT_DIRS=$(find gh_pages/$ENV_NAME -maxdepth 1 -type d -regex ".*/[0-9]+" -printf "%f\n" | sort -nr)
-          IS_FIRST=true
-          for ID in $REPORT_DIRS; do
-            REPORT_DIR="gh_pages/${ENV_NAME}/${ID}"
-            TS_FILE="$REPORT_DIR/timestamp.txt"
-            HISTORY_TREND_FILE="$REPORT_DIR/history/history-trend.json"
-        
-            if [ -f "$TS_FILE" ]; then
-              TS=$(cat "$TS_FILE")
-            else
-              TS=$(date -r "$REPORT_DIR" +"%Y-%m-%d %H:%M")
-            fi
-        
-            if [ -f "$HISTORY_TREND_FILE" ]; then
-              PASSED=$(jq '.[0].data.passed' "$HISTORY_TREND_FILE")
-              TOTAL=$(jq '.[0].data.total' "$HISTORY_TREND_FILE")
-              if [ "$TOTAL" -gt 0 ]; then
-                PASS_PERCENT=$(( 100 * PASSED / TOTAL ))
-              else
-                PASS_PERCENT="N/A"
-              fi
-            else
-              PASS_PERCENT="N/A"
-            fi
-          
-            if [ "$IS_FIRST" = true ]; then
-              LABEL=" <span style='background-color:#007bff;color:#fff;padding:2px 6px;border-radius:4px;font-size:0.8rem;'>Latest</span>"
-              IS_FIRST=false
-            else
-              LABEL=""
-            fi
-          
-            echo "<tr><td>#${ID} $LABEL</td><td>${TS}</td><td>${PASS_PERCENT}%</td><td><a href='${ENV_NAME}/${ID}/index.html'>View Report</a></td></tr>" >> "$LANDING_PAGE"
-          done
-
-          echo "</tbody></table>" >> "$LANDING_PAGE"
-        done
-
-        echo "</body></html>" >> "$LANDING_PAGE"
+      run: bash "${{ github.action_path }}/../shared/landing-page.sh"
+      env:
+        AI_ANALYSIS: ${{ inputs.ai_analysis }}
       shell: bash

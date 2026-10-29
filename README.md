@@ -50,6 +50,13 @@ Merges results from all browsers, generates a full Allure report, tracks histori
 | `results_pattern` | Name pattern of the results artifacts | ❌        | `allure-results-*` |
 | `build_name`    | Build name shown in the report          | ❌        | `Automated tests` |
 | `allure_version` | Allure CLI version to generate with    | ❌        | `2.36.0`    |
+| `ai_analysis`   | Add an "AI analysis" column to the dashboard (see [AI analysis](#3-publish-ai-analysis)) | ❌ | `false` |
+
+#### 📤 Outputs
+
+| Output               | Description |
+|----------------------|-------------|
+| `ai_analysis_needed` | `true` when `ai_analysis` is on and the run had failed or broken tests, so an analysis should follow - use it as the analysis job's condition. `false` otherwise. |
 
 #### ✅ What It Does
 
@@ -60,6 +67,7 @@ Merges results from all browsers, generates a full Allure report, tracks histori
 - Generates the full HTML report using Allure CLI.
 - Creates a redirect `index.html` for latest environment report.
 - Updates a central landing page with links and pass stats.
+- With `ai_analysis: true`, records each run's analysis status and adds the "AI analysis" column. With the default `false` the landing page is exactly as before.
 
 ---
 
@@ -77,6 +85,58 @@ gh_pages/
 Your test jobs must output Allure results to allure-results/ and upload them with `Push Allure Results` in the same workflow run.  
 The Allure CLI (allure-commandline) is installed via npm at the pinned `allure_version`.  
 When publishing with `peaceiris/actions-gh-pages`, set `force_orphan: true` so the branch keeps a single commit instead of growing by a full report snapshot on every run.
+
+---
+
+### 3. `Publish AI Analysis`
+
+Adds an AI-written analysis of a run (a Markdown file, e.g. from `anthropics/claude-code-action`) to that run's report and links it from the dashboard. Use it together with `ai_analysis: true` on `Publish Allure Report`.
+
+The dashboard's "AI analysis" column shows, per run:
+
+| Cell              | When |
+|-------------------|------|
+| *Running…*        | The run had failed or broken tests and the analysis isn't published yet (links to the GitHub Actions run) |
+| *Not needed*      | Every test passed |
+| *View analysis*   | The analysis is published - links to `<env>/<id>/ai-analysis/index.html` |
+| *Analysis failed* | `Publish AI Analysis` ran without a report file (links to the GitHub Actions run) |
+| –                 | Runs from before the column was turned on |
+
+#### 🔧 Inputs
+
+| Input            | Description                                                  | Required | Default                  |
+|------------------|--------------------------------------------------------------|----------|--------------------------|
+| `branch`         | Branch the reports are published to                          | ❌       | `gh_pages`               |
+| `env_name`       | Environment the report was published under                   | ✅       | –                        |
+| `report_id`      | Build/Run ID of the report                                   | ✅       | –                        |
+| `report_file`    | The analysis as Markdown; missing or empty = "Analysis failed" | ❌     | `ci-analysis/report.md`  |
+| `marked_version` | `marked` version used to render the Markdown                 | ❌       | `18.1.2`                 |
+
+#### ✅ What It Does
+
+- Checks out `gh_pages`, renders the Markdown as a styled page next to the run's Allure report (raw HTML in the Markdown is escaped, not rendered) and keeps the `.md` beside it.
+- Marks the analysis done - or failed when there is no report file - and regenerates the landing page.
+- Leaves the publishing to your `peaceiris/actions-gh-pages` step, as `Publish Allure Report` does. Run both with `if: always()` so a crashed analysis shows "Analysis failed" instead of "Running…" for good.
+
+```yaml
+  analyse:
+    needs: [ aggregate ]
+    if: always() && needs.aggregate.outputs.ai_analysis_needed == 'true'
+    steps:
+      # ... produce ci-analysis/report.md ...
+      - uses: Simeon-Zografov/build-allure-report-action/.github/actions/publish-ai-report@v2.1.0
+        if: always()
+        with:
+          env_name: QA
+          report_id: ${{ github.run_number }}
+      - uses: peaceiris/actions-gh-pages@v4
+        if: always()
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh_pages
+          publish_dir: gh_pages
+          force_orphan: true
+```
 
 ## 🚀 Usage Example
 

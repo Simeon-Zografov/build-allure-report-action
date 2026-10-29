@@ -1,0 +1,75 @@
+name: 'Publish AI Analysis'
+description: 'Add an AI-written analysis of a run to its report on gh_pages and link it from the dashboard'
+
+inputs:
+  branch:
+    description: 'Branch the reports are published to'
+    required: false
+    default: 'gh_pages'
+  env_name:
+    description: 'Environment name the report was published under (QA, UAT, etc.)'
+    required: true
+  report_id:
+    description: 'Build/Run ID of the report'
+    required: true
+  report_file:
+    description: 'The analysis as a Markdown file; when it is missing the dashboard shows "Analysis failed"'
+    required: false
+    default: 'ci-analysis/report.md'
+  marked_version:
+    description: 'marked version used to render the Markdown'
+    required: false
+    default: '18.1.2'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout gh_pages branch
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository }}
+        ref: ${{ inputs.branch }}
+        path: gh_pages
+
+    - name: Remove the branch's git data
+      # gh_pages/ is published as a plain directory
+      run: rm -rf gh_pages/.git gh_pages/.github
+      shell: bash
+
+    - name: Install the Markdown renderer
+      run: |
+        mkdir -p "$RUNNER_TEMP/ai-report-renderer"
+        cp "${{ github.action_path }}/render.mjs" "$RUNNER_TEMP/ai-report-renderer/"
+        cd "$RUNNER_TEMP/ai-report-renderer"
+        npm init -y > /dev/null
+        npm install --silent --no-audit --no-fund "marked@${{ inputs.marked_version }}"
+      shell: bash
+
+    - name: Add the analysis to the report
+      run: |
+        REPORT_DIR="gh_pages/${{ inputs.env_name }}/${{ inputs.report_id }}"
+        AI_DIR="$REPORT_DIR/ai-analysis"
+        if [ ! -d "$REPORT_DIR" ]; then
+          echo "::error::No report for ${{ inputs.env_name }} #${{ inputs.report_id }} on ${{ inputs.branch }}"
+          exit 1
+        fi
+        mkdir -p "$AI_DIR"
+        [ -f "$AI_DIR/run-url.txt" ] || echo "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${{ github.run_id }}" > "$AI_DIR/run-url.txt"
+
+        if [ -s "${{ inputs.report_file }}" ]; then
+          cp "${{ inputs.report_file }}" "$AI_DIR/report.md"
+          node "$RUNNER_TEMP/ai-report-renderer/render.mjs" "$AI_DIR/report.md" "$AI_DIR/index.html" \
+            "AI analysis - ${{ inputs.env_name }} #${{ inputs.report_id }}" "../../../index.html" "../index.html"
+          echo "done" > "$AI_DIR/status.txt"
+        else
+          echo "::warning::${{ inputs.report_file }} is missing or empty - marking the analysis as failed"
+          echo "failed" > "$AI_DIR/status.txt"
+        fi
+        echo "AI analysis for ${{ inputs.env_name }} #${{ inputs.report_id }}: $(cat "$AI_DIR/status.txt")"
+      shell: bash
+
+    - name: Regenerate landing page with all environments
+      run: bash "${{ github.action_path }}/../shared/landing-page.sh"
+      env:
+        AI_ANALYSIS: 'true'
+      shell: bash
